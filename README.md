@@ -1,4 +1,4 @@
-# Azure Event Hubs .NET Sample: Consumer and Producer
+# Azure Event Hubs .NET Sample
 
 ## Overview
 - Sample solution demonstrating a resilient .NET consumer using Azure Event Hubs SDK and a simple producer.

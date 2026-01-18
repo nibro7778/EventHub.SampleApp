@@ -1,26 +1,24 @@
-using Azure.Messaging.ServiceBus;
-using Azure.Storage.Blobs;
-using ConsumerApp.Application;
-using ConsumerApp.Application.Abstractions;
-using ConsumerApp.Infrastructure;
-using ConsumerApp.Presentation;
-using Microsoft.ApplicationInsights.DependencyCollector;
-using Microsoft.ApplicationInsights.Extensibility;
-using Microsoft.ApplicationInsights.WorkerService;
+using AzureEventHub.Config;
+using ConsumerApp.Handlers;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
-using HealthChecks.Redis; 
 
-var host = Host.CreateDefaultBuilder(args)
-    .ConfigureAppConfiguration((context, config) =>
+internal class Program
+{
+    private static async Task Main(string[] args)
     {
-        config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-        config.AddEnvironmentVariables();
-    })
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureAppConfiguration((context, config) =>
+            {
+                // DO NOT clear config.Sources
+                config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+                config.AddJsonFile(
+                    $"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
+                    optional: true);
+
+                config.AddEnvironmentVariables();
+            })
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();
@@ -29,55 +27,21 @@ var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
         var config = context.Configuration;
-        // Optional Application Insights
-        // Optional: Application Insights can be added by referencing Microsoft.ApplicationInsights.WorkerService and calling AddApplicationInsightsTelemetryWorkerService
-
-        // Blob container client for checkpoint store
-        var blobConn = config["BlobStorage:ConnectionString"];
-        var blobContainerName = config["BlobStorage:ContainerName"];
-        var blobContainerClient = new BlobContainerClient(blobConn, blobContainerName);
-        blobContainerClient.CreateIfNotExists();
-
-        services.AddSingleton(blobContainerClient);
-
-        // ServiceBus client for DLQ
-        services.AddSingleton(sp =>
+        
+        services.AddEventHub(k =>
         {
-            var sbConn = config["ServiceBus:ConnectionString"];
-            return new ServiceBusClient(sbConn);
-        });
-
-
-        // Redis
-        services.AddSingleton<IConnectionMultiplexer>(sp =>
-        {
-            var redisConn = config["Redis:ConnectionString"];
-            return ConnectionMultiplexer.Connect(redisConn);
-        });
-
-
-        // Add our services
-        services.AddSingleton<IIdempotencyService, IdempotencyService>();
-        services.AddSingleton<IDlqService, DlqService>();
-        services.AddSingleton<IBusinessProcess, BusinessProcessor>();
-
-        // Hosted Processor Service
-        services.AddHostedService<EventHubProcessorService>();
-
-        // Health Checks
-        services.AddHealthChecks()
-            .AddCheck("self", () => HealthCheckResult.Healthy())
-            .AddRedis(config["Redis:ConnectionString"], name: "redis"); // This will now resolve
-
-        // Optional: Application Insights
-        // Replace obsolete InstrumentationKey usage with ConnectionString as per Application Insights guidance
-        if (!string.IsNullOrEmpty(config["ApplicationInsights:ConnectionString"]))
-        {
-            services.AddApplicationInsightsTelemetryWorkerService(options =>
+            k.Namespace(config["EventHubRider:Namespace"]);
+            k.Storage(config["EventHubRider:StorageAccount"]);
+            k.BlobContainer(config["EventHubRider:BlobContainer"]);
+            k.ReceiveEndpoint("customer.created", "sampleapp", c =>
             {
-                options.ConnectionString = config["ApplicationInsights:ConnectionString"];
+                c.ConfigureConsumer<CustomerEventHandler>(context);
             });
-        }
+            k.ReceiveEndpoint("invoice.created", "sampleapp", c =>
+            {
+                c.ConfigureConsumer<InvoiceEventHandler>(context);
+            });
+        });        
     })
     .ConfigureLogging(logging =>
     {
@@ -86,4 +50,6 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
-await host.RunAsync();
+        await host.RunAsync();
+    }
+}
