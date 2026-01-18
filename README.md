@@ -10,22 +10,24 @@ Code-first Azure Event Hubs consumer/producer sample targeting .NET 8.
 ## Code-first configuration
 Endpoints are configured in code; no `EventHubs` array in appsettings.
 
+```csharp
 services.AddEventHub(k =>
 {
-  k.Namespace(config["EventHubRider:Namespace"]);
-  k.Storage(config["EventHubRider:StorageAccount"]);
-  k.BlobContainer(config["EventHubRider:BlobContainer"]);
+    k.Namespace(config["EventHubRider:Namespace"]);
+    k.Storage(config["EventHubRider:StorageAccount"]);
+    k.BlobContainer(config["EventHubRider:BlobContainer"]);
 
-  k.ReceiveEndpoint("customer.created", "sampleapp", c =>
-  {
-    c.ConfigureConsumer<CustomerEventHandler>(context);
-  });
+    k.ReceiveEndpoint("customer.created", "sampleapp", c =>
+    {
+        c.ConfigureConsumer<CustomerEventHandler>(context);
+    });
 
-  k.ReceiveEndpoint("invoice.created", "sampleapp", c =>
-  {
-    c.ConfigureConsumer<InvoiceEventHandler>(context);
-  });
+    k.ReceiveEndpoint("invoice.created", "sampleapp", c =>
+    {
+        c.ConfigureConsumer<InvoiceEventHandler>(context);
+    });
 });
+```
 
 Library types:
 - Configuration: `EventHubConfiguration`
